@@ -117,7 +117,11 @@ The cells are taken from the exact band boundaries, so slightly irregular
 diffused grids are fine. Two things are handled automatically:
 
 - **Grid detection** — when no border lines are found, ink-based detection
-  kicks in automatically (`--ink-grid` forces it).
+  kicks in automatically (`--ink-grid` forces it). A diffused image can also
+  keep its grid borders while the glyphs sit shifted inside the cells
+  (decorative or preserved lines); if the detected borders misalign with
+  the glyph rows, the cells are re-sliced from the ink layout instead and
+  the font size is measured from the x-height.
 - **Font size** — diffused cells include large inter-row gaps, so the
   cell-relative size estimate is wrong; instead the em is derived from the
   x-height measured off the raster (x-height glyphs / 0.5).

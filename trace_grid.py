@@ -137,6 +137,47 @@ def _band_runs(vals, min_width, thr):
     return out
 
 
+def _cells_from_ink(img, cols, rows):
+    """Derive cell boxes from the ink layout, mirroring detect_grid_ink.
+
+    Row boundaries come from the y-projection bands refined to the true ink
+    extents; columns from the first row's x-projection. Returns a row-major
+    list of (x0, y0, x1, y1), or None when the ink does not form the
+    expected grid.
+    """
+    g = img.convert("L")
+    w, h = g.size
+    px = g.load()
+    ink = lambda v: v < 170
+
+    yproj = [0] * h
+    for y in range(h):
+        yproj[y] = sum(1 for x in range(0, w, 2) if ink(px[x, y]))
+    if not any(yproj):
+        return None
+    row_bands = _band_runs(yproj, max(30, h // 40), max(yproj) * 0.03)
+    if len(row_bands) != rows:
+        return None
+    a0, b0 = row_bands[0]
+    xproj = [0] * w
+    for y in range(a0, b0):
+        for x in range(w):
+            if ink(px[x, y]):
+                xproj[x] += 1
+    col_bands = _drop_merged(_band_runs(xproj, 4, 1), 6)
+    if len(col_bands) != cols:
+        return None
+    extents = _row_ink_extents(g, row_bands, col_bands)
+    ys = [extents[0][0]] + [(a[1] + b[0]) // 2
+                            for a, b in zip(extents, extents[1:])] \
+         + [extents[-1][1]]
+    xs = [col_bands[0][0]] + [(a[1] + b[0]) // 2
+                              for a, b in zip(col_bands, col_bands[1:])] \
+         + [col_bands[-1][1]]
+    return [(xs[c], ys[r], xs[c + 1], ys[r + 1])
+            for r in range(rows) for c in range(cols)]
+
+
 def detect_grid_ink(img):
     """Borderless grid detection for diffused images.
 
@@ -824,6 +865,26 @@ def main():
             print("borderless grid detected from ink layout")
         else:
             cols, rows, cell, padding = det_b
+            # The detected border lines can sit off the actual glyph rows
+            # (a diffused image may keep decorative grid lines while the
+            # glyphs shift within the cells), which mis-slices the rows —
+            # clipping glyphs and pulling in their neighbors' ink. Compare
+            # the ink row positions with the border rows and slice from the
+            # ink when they disagree.
+            ink_cells = _cells_from_ink(img, cols, rows)
+            if ink_cells is not None:
+                centers_b = [padding + r * cell + cell / 2
+                             for r in range(rows)]
+                centers_i = [(ink_cells[r * cols][1]
+                              + ink_cells[r * cols][3]) / 2
+                             for r in range(rows)]
+                offsets = sorted(abs(b - i)
+                                 for b, i in zip(centers_b, centers_i))
+                if offsets[len(offsets) // 2] > 0.06 * cell:
+                    cells = ink_cells
+                    ink_detected = True
+                    print("grid borders misalign with the glyph rows; "
+                          "slicing from the ink instead")
 
     if cells is None:
         cells = [(padding + c * cell, padding + r * cell,
@@ -943,13 +1004,15 @@ def main():
 
     if args.font_size is None:
         if ink_detected:
-            # Diffused grids: the cell includes inter-row gaps, so the
+            # Diffused grids (borderless, or borders misaligned with the
+            # glyph rows): the cell includes inter-row gaps, so the
             # cell-relative estimate is wrong; measure the x-height instead.
             args.font_size = estimate_font_size(glyphs, boxes, row_baselines,
                                                 cols, cell)
             print(f"estimated font size {args.font_size}px from x-height")
         else:
-            # References render glyphs at 56px in 96px cells.
+            # Clean reference grids render glyphs at 56px in 96px cells,
+            # which is exact for them but wrong for diffused layouts.
             args.font_size = max(1, round(cell * 56 / 96))
     scale = args.upem / args.font_size
 
