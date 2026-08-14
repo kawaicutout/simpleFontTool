@@ -1,0 +1,2216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>font_ui — font customization &amp; glyph editor</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f4f6; --panel: #ffffff; --line: #d8dde3; --ink: #1c2530;
+    --mut: #6b7684; --acc: #2d6cdf; --acc-soft: #e8f0fd; --warn: #b45309;
+    --toast-bg: #232b36; --toast-fg: #ffffff; --kbd-bg: #eef1f5;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1318; --panel: #171c23; --line: #2a323c; --ink: #dde3ea;
+    --mut: #8b96a3; --acc: #6ea8ff; --acc-soft: #1d2a3c; --warn: #e8a04c;
+    --toast-bg: #2a323c; --toast-fg: #eef2f6; --kbd-bg: #242c36;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--ink);
+    display: flex; flex-direction: column;
+  }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 8px 12px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .grow { flex: 1 1 auto; }
+  label { color: var(--mut); font-size: 11px; display: flex; align-items: center; gap: 4px; }
+  input[type=text], input[type=number], select {
+    font: inherit; padding: 3px 6px; border: 1px solid var(--line);
+    border-radius: 5px; background: var(--panel); color: var(--ink);
+  }
+  input[type=number] { width: 76px; }
+  input:focus, select:focus { outline: 2px solid var(--acc-soft); border-color: var(--acc); }
+  button {
+    font: inherit; padding: 4px 10px; border: 1px solid var(--line);
+    border-radius: 5px; background: var(--panel); color: var(--ink); cursor: pointer;
+  }
+  button:hover { background: var(--acc-soft); border-color: var(--acc); }
+  button.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+  button.primary:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .45; cursor: default; }
+  .info { color: var(--mut); font-size: 11px; white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis; max-width: 520px; }
+  #preview {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 14px; overflow-x: auto; white-space: pre; min-height: 34px;
+    color: var(--ink); line-height: 1.2;
+  }
+  main { flex: 1; display: flex; min-height: 0; }
+  #left {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    background: var(--panel); border-right: 1px solid var(--line);
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .panel-head b { font-size: 12px; }
+  #grid {
+    flex: 1; overflow: auto; padding: 10px; display: grid;
+    grid-template-columns: repeat(auto-fill, 44px); gap: 3px;
+    align-content: start; justify-content: start;
+  }
+  .cell {
+    width: 44px; height: 44px; padding: 0; border: 1px solid var(--line);
+    border-radius: 4px; background: var(--panel); display: flex; align-items: center;
+    justify-content: center; font-size: 24px; line-height: 1;
+  }
+  .cell span { font-family: "uiFont", serif; }
+  .cell .blank { color: var(--mut); }
+  .cell:hover { border-color: var(--acc); }
+  .cell.sel { border-color: var(--acc); background: var(--acc-soft);
+              box-shadow: 0 0 0 1px var(--acc); }
+  #divider {
+    flex: 0 0 6px; cursor: col-resize; touch-action: none;
+    background: var(--line); user-select: none;
+  }
+  #divider:hover, #divider.dragging { background: var(--acc); }
+  #right { width: 460px; min-width: 400px; max-width: 1100px;
+           display: flex; flex-direction: column; background: var(--panel); }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs button {
+    flex: 1; border: none; border-right: 1px solid var(--line);
+    border-radius: 0; padding: 7px; background: transparent; color: var(--mut);
+    font-weight: 600;
+  }
+  .tabs button.on { color: var(--acc); box-shadow: inset 0 -2px 0 var(--acc); }
+  .tab { flex: 1; overflow-y: auto; padding: 10px; display: none; }
+  .tab.on { display: block; }
+  .field { display: flex; align-items: center; justify-content: space-between;
+           gap: 8px; padding: 3px 0; }
+  .field label { font-size: 12px; color: var(--ink); }
+  .field .hint { font-size: 11px; color: var(--mut); }
+  .group { border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+           margin-bottom: 10px; }
+  .group h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase;
+              letter-spacing: .06em; color: var(--mut); }
+  table.kern { width: 100%; border-collapse: collapse; }
+  table.kern td, table.kern th { padding: 3px 6px; border-bottom: 1px solid var(--line);
+                                 text-align: left; }
+  table.kern th { font-size: 11px; color: var(--mut); font-weight: 600; }
+  table.kern input { width: 64px; }
+  .kern-ch { font-family: "uiFont", serif; font-size: 18px; }
+  #glyphcanvas { display: block; border: 1px solid var(--line); border-radius: 6px;
+                 background: var(--panel); }
+  #glyphcanvas:focus { outline: none; box-shadow: 0 0 0 2px var(--acc-soft); }
+  .gmeta { display: flex; gap: 10px; align-items: center; margin-top: 6px;
+           flex-wrap: wrap; }
+  .dirty { color: var(--warn); font-weight: 700; }
+  .hint { color: var(--mut); font-size: 11px; }
+  .shiftrow { display: flex; gap: 4px; flex-wrap: wrap; }
+  .shiftrow button { padding: 2px 8px; }
+  .tools { display: flex; align-items: center; gap: 4px; margin-bottom: 6px;
+           flex-wrap: wrap; }
+  .tools button { padding: 2px 9px; font-size: 12px; }
+  .tools .tool.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+  .tools .tool.on:hover { filter: brightness(1.08); }
+  .tsep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+  #sel-info { font-size: 11px; }
+  details summary { cursor: pointer; color: var(--mut); font-size: 11px;
+                    user-select: none; margin-bottom: 4px; }
+  .tr-row { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+            margin-bottom: 6px; background: var(--panel); }
+  .tr-row.pending { opacity: .8; }
+  .tr-line1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tr-name { flex: 1; min-width: 150px; overflow: hidden; text-overflow: ellipsis;
+             white-space: nowrap; font-size: 12px; }
+  .tr-weight { width: 64px; }
+  .tr-style-input { width: 90px; }
+  .tr-weight.ask { border-color: var(--warn); }
+  .tr-hint { color: var(--mut); }
+  .tr-line2 { display: flex; gap: 8px; margin-top: 3px; align-items: center;
+              font-size: 11px; color: var(--mut); }
+  .tr-out { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tr-status.ok { color: #1e8449; }
+  html[data-theme="dark"] .tr-status.ok { color: #5ec46a; }
+  .tr-status.err { color: #c0392b; }
+  html[data-theme="dark"] .tr-status.err { color: #ef6a5a; }
+  .tr-status.running { color: var(--acc); }
+  .modal {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .45);
+    display: none; align-items: center; justify-content: center; z-index: 50;
+  }
+  .modal.open { display: flex; }
+  .modal-box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px; width: 92%; max-width: 880px; max-height: 88vh;
+    display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  }
+  #gallery-cards {
+    overflow-y: auto; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;
+  }
+  .g-card {
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+    display: flex; flex-direction: column; gap: 6px; background: var(--panel);
+  }
+  .g-card.needs { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+  .g-card img {
+    width: 100%; height: 140px; object-fit: contain; background: #fff;
+    border-radius: 4px; border: 1px solid var(--line);
+  }
+  .g-name {
+    font-size: 11px; color: var(--mut); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .g-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .g-controls select { flex: 1; min-width: 110px; }
+  #toast {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    background: var(--toast-bg); color: var(--toast-fg); padding: 8px 14px;
+    border-radius: 6px; font-size: 12px; opacity: 0; pointer-events: none;
+    transition: opacity .18s; max-width: 70vw; word-break: break-word;
+  }
+  #toast.show { opacity: 1; }
+  kbd { background: var(--kbd-bg); border: 1px solid var(--line); border-radius: 3px;
+        padding: 0 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <label>Font
+      <select id="fontsel" style="min-width: 260px"></select>
+    </label>
+    <button id="reload" title="reload the current font from disk">Reload</button>
+    <span class="info grow" id="fmeta"></span>
+    <button id="savebtn" title="save the working font to out/ui/">Save font</button>
+    <button id="dlbtn" class="primary" title="download the working font as .ttf">Download</button>
+    <button id="theme-btn" title="toggle light/dark theme">Dark mode</button>
+  </div>
+  <div class="row">
+    <label>Family <input id="id-family" type="text" style="width: 130px"></label>
+    <label>Style <input id="id-sub" type="text" style="width: 90px"></label>
+    <label>Weight <input id="id-weight" type="number" min="1" max="1000" step="100" style="width: 60px"></label>
+    <label><input id="id-italic" type="checkbox"> Italic</label>
+    <button id="id-apply">Apply identity</button>
+    <span class="hint">family / style / weight / italic are written to the name table on export</span>
+  </div>
+  <div class="row">
+    <label>Preview
+      <input id="preview-text" type="text" style="width: 380px"
+             value="The quick brown fox jumps over the lazy dog — AVATAR To Wo 0123456789">
+    </label>
+    <label>Test
+      <select id="preset-sel">
+        <option value="">test strings…</option>
+      </select>
+    </label>
+    <label>Size
+      <select id="preview-size">
+        <option>32</option><option selected>64</option><option>96</option><option>144</option>
+      </select>
+    </label>
+    <div id="preview" class="grow"></div>
+  </div>
+</header>
+
+<main>
+  <section id="left">
+    <div class="panel-head">
+      <b>Glyphs</b>
+      <input id="gsearch" type="text" placeholder="filter by name or char…" style="width: 180px">
+      <span class="hint" id="gcount"></span>
+    </div>
+    <div id="grid"></div>
+  </section>
+
+  <div id="divider" role="separator" aria-orientation="vertical"
+       title="drag to resize · double-click to reset"></div>
+
+  <section id="right">
+    <div class="tabs">
+      <button id="tabbtn-metrics" class="on">Metrics</button>
+      <button id="tabbtn-kerning">Kerning</button>
+      <button id="tabbtn-glyph">Glyph</button>
+      <button id="tabbtn-trace">Trace</button>
+    </div>
+
+    <div id="tab-metrics" class="tab on">
+      <div class="group">
+        <h3>Vertical metrics (font units)</h3>
+        <div class="field"><label>Ascent</label><input id="m-ascent" type="number"></div>
+        <div class="field"><label>Descent</label><input id="m-descent" type="number"></div>
+        <div class="field"><label>Line gap</label><input id="m-linegap" type="number"></div>
+        <div class="field"><label>Baseline shift <span class="hint">moves every glyph; + = up</span></label>
+          <input id="m-baseshift" type="number"></div>
+      </div>
+      <div class="group">
+        <h3>Spacing</h3>
+        <div class="field"><label>Advance scale <span class="hint">×</span></label>
+          <input id="m-advscale" type="number" step="0.01" min="0.5" max="2"></div>
+        <div class="field"><label>Side bearing <span class="hint">added to every glyph</span></label>
+          <input id="m-bearing" type="number"></div>
+        <div class="hint">Changes apply immediately to the in-memory font; the grid and
+          preview re-render. All values are overrides relative to the base font.</div>
+      </div>
+    </div>
+
+    <div id="tab-kerning" class="tab">
+      <div class="group">
+        <h3>Kerning pairs</h3>
+        <table class="kern">
+          <thead><tr><th>Left</th><th>Right</th><th>Value</th><th></th></tr></thead>
+          <tbody id="kern-body"></tbody>
+        </table>
+        <div class="row" style="margin-top: 8px">
+          <input id="kern-l" type="text" maxlength="1" placeholder="A" style="width: 40px">
+          <input id="kern-r" type="text" maxlength="1" placeholder="V" style="width: 40px">
+          <input id="kern-v" type="number" placeholder="-40" style="width: 64px">
+          <button id="kern-add">Add pair</button>
+        </div>
+        <div class="hint">Negative values pull the pair together. Type single characters;
+          they map to the glyphs by the font's cmap.</div>
+      </div>
+    </div>
+
+    <div id="tab-glyph" class="tab">
+      <div class="group">
+        <h3 id="g-title">Glyph</h3>
+        <div class="tools">
+          <button id="tool-select" class="tool on" title="Select / move (V)">Select</button>
+          <button id="tool-scale" class="tool" title="Scale selection around its center (S)">Scale</button>
+          <button id="tool-rotate" class="tool" title="Rotate selection around its center (R)">Rotate</button>
+          <span class="tsep"></span>
+          <button id="flip-h" title="flip selection horizontally (whole glyph if none selected)">Flip H</button>
+          <button id="flip-v" title="flip selection vertically (whole glyph if none selected)">Flip V</button>
+          <span class="tsep"></span>
+          <button id="zoom-out" title="zoom out">−</button>
+          <button id="zoom-fit" title="fit glyph (F)">Fit</button>
+          <button id="zoom-in" title="zoom in">+</button>
+          <span class="hint grow" id="sel-info"></span>
+        </div>
+        <canvas id="glyphcanvas" tabindex="0" width="920" height="920"></canvas>
+        <div class="gmeta">
+          <span class="hint"><kbd>drag</kbd> move selection · <kbd>shift-click</kbd> add
+            point · <kbd>drag empty</kbd> marquee · <kbd>dblclick</kbd> add point on
+            curve · <kbd>right-click</kbd> delete · <kbd>arrows</kbd> nudge (Shift = 10) ·
+            <kbd>⌫</kbd> delete selected · <kbd>wheel</kbd> zoom · <kbd>space/middle</kbd> pan</span>
+        </div>
+        <div class="gmeta">
+          <div class="shiftrow">
+            <button data-dx="-10" data-dy="0">←10</button>
+            <button data-dx="10" data-dy="0">→10</button>
+            <button data-dx="0" data-dy="10">↑10</button>
+            <button data-dx="0" data-dy="-10">↓10</button>
+            <button data-dx="-1" data-dy="0">←1</button>
+            <button data-dx="1" data-dy="0">→1</button>
+            <button data-dx="0" data-dy="1">↑1</button>
+            <button data-dx="0" data-dy="-1">↓1</button>
+          </div>
+          <span class="hint">moves the whole glyph</span>
+        </div>
+        <div class="gmeta">
+          <label>Advance <input id="g-adv" type="number"></label>
+          <label>LSB <input id="g-lsb" type="number"></label>
+          <button id="g-applymetrics">Apply metrics</button>
+          <button id="g-undo">Undo</button>
+          <button id="g-redo">Redo</button>
+          <button id="g-save" class="primary">Save outline</button>
+          <span class="dirty" id="g-dirty" style="display:none">● unsaved</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-trace" class="tab">
+      <div class="group">
+        <h3>Diffusion output to fonts</h3>
+        <div class="field"><label>Family</label>
+          <select id="tr-family-sel" style="width: 150px"></select>
+          <input id="tr-family" type="text" placeholder="Edge Knight" style="width: 180px">
+        </div>
+        <div class="field"><label>Output</label>
+          <select id="tr-outdir">
+            <option value="fonts">fonts/</option>
+            <option value="out/traced">out/traced/</option>
+          </select>
+        </div>
+        <details>
+          <summary>Trace options</summary>
+          <div class="field"><label>Turdsize</label><input id="tr-turdsize" type="number" min="0" value="1"></div>
+          <div class="field"><label>Alphamax</label><input id="tr-alphamax" type="number" step="0.1" min="0" max="2" value="1.0"></div>
+          <div class="field"><label>Opt tolerance</label><input id="tr-opttolerance" type="number" step="0.05" min="0" value="0.1"></div>
+          <div class="field"><label>Cu2qu error</label><input id="tr-cu2qu" type="number" step="0.1" min="0.1" value="0.5"></div>
+          <div class="field"><label>Side bearing px</label><input id="tr-bearingpx" type="number" step="0.5" min="0" value="2.0"
+            title="right side bearing in px; also the left side floor"></div>
+          <div class="field"><label>Left bearing frac</label><input id="tr-bearingfrac" type="number" step="0.01" min="0" max="0.5" value="0.15"
+            title="left side bearing as a fraction of the glyph width (wider glyphs get more)"></div>
+          <div class="field"><label>Invert (light on dark)</label><input id="tr-invert" type="checkbox"></div>
+          <div class="field"><label>Baseline px</label><input id="tr-baseline" type="number" placeholder="auto"></div>
+          <div class="field"><label>Mask threshold</label><input id="tr-mask" type="number" placeholder="auto"></div>
+          <div class="field"><label>Metrics from</label><input id="tr-metrics" type="text" placeholder="fonts/Family-Regular.ttf" style="width: 180px"></div>
+        </details>
+      </div>
+      <div class="group">
+        <h3>Images
+          <label style="margin-left:10px"><input id="tr-selall" type="checkbox"> select all</label>
+        </h3>
+        <div id="tr-list"></div>
+      </div>
+      <div class="row">
+        <button id="tr-run" class="primary">Trace selected</button>
+        <button id="tr-review">Review assignments…</button>
+        <span class="hint" id="tr-progress"></span>
+      </div>
+      <div class="hint">Families are subfolders of diffusion_generations/.
+        Weight/italic are read from file names when they carry hints; images
+        without a hint open a gallery for you to assign them. The subfamily
+        name and file name come from the weight/italic you pick per image;
+        existing fonts with the same name are only replaced after you confirm.</div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<div id="gallery" class="modal" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <h3 style="margin:0 0 4px">Assign weights &amp; styles</h3>
+    <p class="hint" style="margin:0 0 8px">These images carry no weight/italic
+      hint in their names — pick a setting for each, then trace. Edits apply
+      to the list too.</p>
+    <div id="gallery-cards"></div>
+    <div class="row" style="justify-content: flex-end; margin-top: 10px">
+      <button id="gallery-cancel">Cancel</button>
+      <button id="gallery-ok" class="primary">Trace with these settings</button>
+    </div>
+  </div>
+</div>
+
+<style id="fontstyle"></style>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const api = async (url, opts) => {
+  let r;
+  try {
+    r = await fetch(url, opts);
+  } catch (e) {
+    return { ok: false, error: "server unreachable — is font_ui.py running?" };
+  }
+  try { return await r.json(); } catch { return { ok: false, error: r.status }; }
+};
+const apiGet = (url) => api(url);
+const apiPost = (url, body) => api(url, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+// Serialize state-mutating operations (font loads, metric applies, outline
+// saves, exports). A font switch must wait for in-flight applies to finish,
+// and applies must not race each other — otherwise a slow response can land
+// on the wrong font or clobber a newer adjustment state.
+let opChain = Promise.resolve();
+function enqueue(fn) {
+  const run = opChain.then(fn);
+  opChain = run.catch(() => {});
+  return run;
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+const S = {
+  font: null,        // font info from /api/font
+  glyphs: [],        // glyph list from /api/glyphs
+  adj: {},           // flat adjustments state (authoritative copy from server)
+  sel: null,         // selected glyph name
+  outline: null,     // working outline {contours: [[{x,y,on},...], ...]}
+  selPts: [],        // selected points [{ci, pi}, ...]
+  selPrimary: null,  // primary (clicked/dragged) point {ci, pi}
+  tool: "select",    // 'select' | 'scale' | 'rotate'
+  undoStack: [], redoStack: [],
+  dirty: false,
+  fontData: null,
+  charToGlyph: {},   // single char -> glyph name
+  previewSize: 64,
+};
+
+// -------------------------------------------------------- session backup
+
+// The working state lives in the server process; this mirrors it into
+// localStorage so closing the tab (or a server restart) loses nothing.
+// The payload is replayed on boot through the normal API endpoints.
+const SESSION_KEY = "fontui-session";
+let restoring = false;
+
+function currentIdentity() {
+  return {
+    family: $("id-family").value.trim(),
+    subfamily: $("id-sub").value.trim(),
+    weight: parseInt($("id-weight").value, 10) || 400,
+    italic: $("id-italic").checked,
+  };
+}
+
+async function saveSession() {
+  if (!S.font || restoring) return;
+  let srv = { adj: S.adj, identity: currentIdentity(), edits: {} };
+  try {
+    const r = await apiGet("/api/session");
+    if (r.ok) srv = r.session;
+  } catch (e) {}
+  const payload = {
+    version: 1,
+    fontPath: S.font.path,
+    adj: srv.adj || {},
+    identity: srv.identity || currentIdentity(),
+    edits: srv.edits || {},
+    dirty: (S.outline && S.dirty && S.sel)
+      ? { [S.sel]: { contours: S.outline.contours } } : null,
+  };
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  } catch (e) {
+    toast("could not save the session locally (storage full?)");
+  }
+}
+
+// Tab close / navigation: capture the current state synchronously (no
+// awaits), pushing any unsaved outline to the server too so it is not lost
+// either way.
+window.addEventListener("pagehide", () => {
+  if (!S.font) return;
+  let payload = null;
+  try { payload = JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch (e) {}
+  const base = payload && payload.fontPath === S.font.path
+    ? payload : { version: 1, fontPath: S.font.path, adj: {}, identity: null, edits: {} };
+  base.adj = S.adj;
+  base.identity = currentIdentity();
+  if (S.outline && S.dirty && S.sel) {
+    base.dirty = { [S.sel]: { contours: S.outline.contours } };
+    try {
+      navigator.sendBeacon("/api/glyph/" + encodeURIComponent(S.sel),
+        new Blob([JSON.stringify({ contours: S.outline.contours })],
+                 { type: "application/json" }));
+    } catch (e) {}
+  }
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(base)); } catch (e) {}
+});
+
+async function restoreSession() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch (e) {}
+  if (!saved || !saved.fontPath) return false;
+  // the font file must still exist; this also validates the path
+  const check = await apiPost("/api/font", { path: saved.fontPath });
+  if (!check.ok) {
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    toast("saved session unavailable (" + check.error + ") — starting fresh");
+    return false;
+  }
+  toast("restoring your last session…");
+  restoring = true;
+  try {
+    await doSelectFont(saved.fontPath);
+    if (saved.identity) {
+      await apiPost("/api/name", saved.identity);
+    }
+    const mr = await apiPost("/api/metrics", saved.adj || {});
+    if (mr.ok) S.adj = mr.adj || S.adj;
+    const edits = Object.assign({}, saved.edits || {}, saved.dirty || {});
+    for (const [name, outl] of Object.entries(edits)) {
+      await apiPost("/api/glyph/" + encodeURIComponent(name),
+                    { contours: outl.contours });
+    }
+    // sync the UI with the restored state (S.font must reflect the
+    // replayed metrics, not the pre-replay /api/name snapshot)
+    const fs = await apiGet("/api/font");
+    if (fs.ok) {
+      S.font = fs.font;
+      S.adj = fs.adj || S.adj;
+    }
+    $("id-family").value = S.font.family;
+    $("id-sub").value = S.font.subfamily;
+    $("id-weight").value = S.font.weight;
+    $("id-italic").checked = !!S.font.italic;
+    await refreshGlyphs();
+    renderKerning();
+    renderMetricsFields();
+    refreshFontData();
+    const dirtyName = Object.keys(saved.dirty || {})[0];
+    if (dirtyName) selectGlyph(dirtyName);
+    const n = Object.keys(edits).length;
+    toast(`restored your last session (${n} glyph edit${n === 1 ? "" : "s"})`);
+  } finally {
+    restoring = false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------- font load
+
+async function loadFontList() {
+  const r = await apiGet("/api/fonts");
+  if (!r.ok) { toast(r.error); return; }
+  populateFontSel(r.fonts);
+  const restored = await restoreSession();
+  if (!restored) {
+    if (r.fonts.length) selectFont(r.fonts[0].path);
+    else toast("no fonts found — run trace_grid.py or drop a .ttf in fonts/");
+  }
+}
+
+// Re-populate the picker keeping the current selection (used after tracing).
+function populateFontSel(fonts) {
+  const cur = $("fontsel").value;
+  const sel = $("fontsel");
+  sel.innerHTML = "";
+  for (const f of fonts) {
+    const opt = document.createElement("option");
+    opt.value = f.path;
+    opt.textContent = f.name;
+    sel.appendChild(opt);
+  }
+  if (cur && [...sel.options].some((o) => o.value === cur)) sel.value = cur;
+}
+
+function selectFont(path) {
+  clearTimeout(metricsTimer);
+  metricsPending = false;
+  return enqueue(() => doSelectFont(path));
+}
+
+async function doSelectFont(path) {
+  const r = await apiPost("/api/font", { path });
+  if (!r.ok) { toast(r.error); return; }
+  S.font = r.font;
+  S.adj = r.adj || {};
+  S.sel = null; S.outline = null; S.selPts = []; S.selPrimary = null;
+  S.tool = "select"; S.undoStack = []; S.redoStack = []; S.dirty = false;
+  $("g-dirty").style.display = "none";
+  $("g-save").disabled = true;
+  $("g-title").textContent = "Glyph";
+  drawEditor();
+  $("id-family").value = r.font.family;
+  $("id-sub").value = r.font.subfamily;
+  $("id-weight").value = r.font.weight;
+  $("id-italic").checked = !!r.font.italic;
+  const cov = r.kernel && r.kernel.total
+    ? ` · GF Latin Kernel ${r.kernel.covered}/${r.kernel.total}` : "";
+  $("fmeta").textContent =
+    `${path} · ${r.font.upem} upem · asc ${r.font.ascent} desc ${r.font.descent}` +
+    ` · ${r.font.numGlyphs} glyphs${cov}`;
+  await refreshGlyphs();
+  renderKerning();
+  renderMetricsFields();
+  refreshFontData();
+  switchTab("glyph");
+  toast(`loaded ${r.font.family} ${r.font.subfamily}`);
+  saveSession();
+}
+
+// ---------------------------------------------------------------- glyph list
+
+async function refreshGlyphs() {
+  const r = await apiGet("/api/glyphs");
+  if (!r.ok) { toast(r.error); return; }
+  S.glyphs = r.glyphs;
+  S.charToGlyph = {};
+  for (const g of S.glyphs) {
+    if (g.cp != null && !S.charToGlyph[String.fromCodePoint(g.cp)]) {
+      S.charToGlyph[String.fromCodePoint(g.cp)] = g.name;
+    }
+  }
+  renderGrid();
+  if (S.sel) {
+    const g = S.glyphs.find((x) => x.name === S.sel);
+    if (g) {
+      if (document.activeElement !== $("g-adv")) $("g-adv").value = g.adv;
+      if (document.activeElement !== $("g-lsb")) $("g-lsb").value = g.lsb;
+    }
+  }
+}
+
+function renderGrid() {
+  const q = $("gsearch").value.trim().toLowerCase();
+  const box = $("grid");
+  box.innerHTML = "";
+  let shown = 0;
+  for (const g of S.glyphs) {
+    const ch = g.cp != null ? String.fromCodePoint(g.cp) : g.name;
+    if (q && !g.name.toLowerCase().includes(q) &&
+        !ch.toLowerCase().includes(q) &&
+        !(g.cp != null && "u+" + g.cp.toString(16).padStart(4, "0") === q)) continue;
+    const cell = document.createElement("button");
+    cell.className = "cell" + (S.sel === g.name ? " sel" : "");
+    cell.title = `${g.name}  U+${g.cp != null ? g.cp.toString(16).toUpperCase().padStart(4, "0") : "—"}` +
+      `  adv ${g.adv}  lsb ${g.lsb}`;
+    const sp = document.createElement("span");
+    sp.textContent = ch;
+    if (g.cp === 0x20 || g.cp === 0xA0) sp.classList.add("blank");
+    cell.appendChild(sp);
+    cell.onclick = () => selectGlyph(g.name);
+    box.appendChild(cell);
+    shown++;
+  }
+  $("gcount").textContent = `${shown}/${S.glyphs.length}`;
+  if (!shown) box.innerHTML = '<div class="hint">no glyphs match</div>';
+}
+
+// ---------------------------------------------------------------- glyph editor
+
+const canvas = $("glyphcanvas");
+const ctx = canvas.getContext("2d");
+const dpr = window.devicePixelRatio || 1;
+let CW = 438, CH = 460;   // resized to fit the panel (see resizeEditor)
+let view = { s: 1, ox: 0, oy: 0 };   // px = u*s + ox ; py = oy - u*s
+
+// ------------------------------------------------------- theme + canvas size
+
+function themeColors() {
+  const dark = document.documentElement.dataset.theme === "dark";
+  return dark ? {
+    canvasBg: "#171c23", gridLine: "#232b34",
+    contourFill: "rgba(110, 168, 255, 0.15)", contourStroke: "#c8d3e0",
+    onFill: "#dbe4ef", onStroke: "#171c23",
+    offFill: "#171c23", offStroke: "#dbe4ef",
+    guideBase: "#8b96a3", guideX: "#e8a14e", guideCap: "#5ec46a",
+    guideAsc: "#6ea8ff", guideAdv: "#ef6a5a", guideLsb: "#7d8895",
+    selRing: "#6ea8ff", connector: "rgba(140, 155, 175, 0.5)",
+  } : {
+    canvasBg: "#ffffff", gridLine: "#f0f2f5",
+    contourFill: "rgba(70, 120, 200, 0.10)", contourStroke: "#2b3a4a",
+    onFill: "#1a3a5c", onStroke: "#ffffff",
+    offFill: "#ffffff", offStroke: "#1a3a5c",
+    guideBase: "#4a5560", guideX: "#b45309", guideCap: "#1e8449",
+    guideAsc: "#2d6cdf", guideAdv: "#c0392b", guideLsb: "#8d99a6",
+    selRing: "#2d6cdf", connector: "rgba(120, 140, 160, 0.55)",
+  };
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem("fontui-theme", theme); } catch (e) {}
+  $("theme-btn").textContent = theme === "dark" ? "Light mode" : "Dark mode";
+  drawEditor();   // repaint the canvas with the new palette
+}
+
+function initTheme() {
+  let theme = null;
+  try { theme = localStorage.getItem("fontui-theme"); } catch (e) {}
+  if (theme !== "light" && theme !== "dark") {
+    theme = (window.matchMedia &&
+             window.matchMedia("(prefers-color-scheme: dark)").matches)
+      ? "dark" : "light";
+  }
+  applyTheme(theme);
+}
+
+$("theme-btn").addEventListener("click", () => {
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+});
+
+// The editor canvas follows the width of the Glyph tab, so the divider can
+// be dragged without clipping the drawing.
+function resizeEditor() {
+  const tab = $("tab-glyph");
+  const avail = tab.clientWidth - 20;   // minus 2×10px tab padding
+  CW = Math.max(320, Math.min(avail, 1200));
+  canvas.width = CW * dpr;
+  canvas.height = CH * dpr;
+  canvas.style.width = CW + "px";
+  canvas.style.height = CH + "px";
+  if (S.outline) fitView();
+  drawEditor();
+}
+
+let resizeRaf = false;
+function scheduleResize() {
+  if (resizeRaf) return;
+  resizeRaf = true;
+  requestAnimationFrame(() => { resizeRaf = false; resizeEditor(); });
+}
+window.addEventListener("resize", scheduleResize);
+
+function selGlyphMeta() {
+  return S.glyphs.find((g) => g.name === S.sel) || null;
+}
+
+function fitView() {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const c of S.outline.contours) {
+    for (const p of c) {
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+      y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+  }
+  const meta = selGlyphMeta();
+  const adv = meta ? meta.adv : S.font.upem;
+  const lsb = meta ? meta.lsb : 0;
+  x0 = Math.min(x0, 0, lsb); x1 = Math.max(x1, adv);
+  y0 = Math.min(y0, S.font.descent); y1 = Math.max(y1, S.font.ascent);
+  if (!isFinite(x0) || !isFinite(x1)) { x0 = 0; x1 = adv; }
+  if (!isFinite(y0) || !isFinite(y1)) { y0 = S.font.descent; y1 = S.font.ascent; }
+  const pad = 90;
+  x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+  const s = Math.min(CW / (x1 - x0), CH / (y1 - y0));
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  view = { s, ox: CW / 2 - cx * s, oy: CH / 2 + cy * s };
+}
+
+function toPx(x, y) { return [x * view.s + view.ox, view.oy - y * view.s]; }
+function toUnits(px, py) { return [(px - view.ox) / view.s, (view.oy - py) / view.s]; }
+
+// contours are kept normalized: start on-curve, no consecutive off-curve points
+function normalize(contour) {
+  if (!contour.length) return contour;
+  const firstOn = contour.findIndex((p) => p.on);
+  if (firstOn < 0) return contour;
+  const pts = contour.slice(firstOn).concat(contour.slice(0, firstOn));
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    out.push(pts[i]);
+    if (!pts[i].on) {
+      const next = pts[(i + 1) % pts.length];
+      if (!next.on) {
+        out.push({ x: (pts[i].x + next.x) / 2, y: (pts[i].y + next.y) / 2, on: true });
+      }
+    }
+  }
+  return out;
+}
+
+function segments(contour) {
+  const out = [], n = contour.length;
+  for (let i = 0; i < n; i++) {
+    if (!contour[i].on) continue;
+    const j = (i + 1) % n;
+    if (contour[j].on) out.push({ a: contour[i], ctrl: null, b: contour[j] });
+    else out.push({ a: contour[i], ctrl: contour[j], b: contour[(j + 1) % n] });
+  }
+  return out;
+}
+
+function contourPath(contour) {
+  const path = new Path2D();
+  const segs = segments(contour);
+  if (!segs.length) return path;
+  const [ax, ay] = toPx(segs[0].a.x, segs[0].a.y);
+  path.moveTo(ax, ay);
+  for (const s of segs) {
+    const [bx, by] = toPx(s.b.x, s.b.y);
+    if (s.ctrl) {
+      const [cxp, cyp] = toPx(s.ctrl.x, s.ctrl.y);
+      path.quadraticCurveTo(cxp, cyp, bx, by);
+    } else path.lineTo(bx, by);
+  }
+  path.closePath();
+  return path;
+}
+
+function drawEditor() {
+  const C = themeColors();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, CW, CH);
+  ctx.fillStyle = C.canvasBg;
+  ctx.fillRect(0, 0, CW, CH);
+  drawUnitGrid();
+  drawGuides();
+  if (!S.outline) return;
+  for (const c of S.outline.contours) {
+    if (c.length < 2) continue;
+    const path = contourPath(c);
+    ctx.fillStyle = C.contourFill;
+    ctx.strokeStyle = C.contourStroke;
+    ctx.lineWidth = 1.6;
+    ctx.fill(path);
+    ctx.stroke(path);
+  }
+  for (const c of S.outline.contours) drawPointStuff(c);
+  for (const { ci, pi } of S.selPts) {
+    const c = S.outline.contours[ci], p = c[pi];
+    if (!p) continue;
+    const primary = S.selPrimary && S.selPrimary.ci === ci
+      && S.selPrimary.pi === pi;
+    const [x, y] = toPx(p.x, p.y);
+    ctx.strokeStyle = primary ? C.selRing : C.guideLsb;
+    ctx.lineWidth = primary ? 2.4 : 1.4;
+    ctx.beginPath();
+    ctx.arc(x, y, primary ? 9 : 7, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if ((S.tool === "scale" || S.tool === "rotate") && S.selPts.length) {
+    const c = selectedCentroid();
+    if (c) {
+      const [cx, cy] = toPx(c.x, c.y);
+      ctx.strokeStyle = C.guideAsc;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - 7, cy); ctx.lineTo(cx + 7, cy);
+      ctx.moveTo(cx, cy - 7); ctx.lineTo(cx, cy + 7);
+      ctx.stroke();
+    }
+  }
+  if (marquee) {
+    const x0 = Math.min(marquee.x0, marquee.x1), y0 = Math.min(marquee.y0, marquee.y1);
+    const x1 = Math.max(marquee.x0, marquee.x1), y1 = Math.max(marquee.y0, marquee.y1);
+    ctx.fillStyle = "rgba(45, 108, 223, 0.08)";
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.strokeStyle = C.selRing;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.setLineDash([]);
+  }
+}
+
+function drawUnitGrid() {
+  const C = themeColors();
+  const u = 50;
+  let step = u;
+  while (step * view.s < 9) step *= 2;
+  const [x0, y0] = toUnits(0, 0), [x1, y1] = toUnits(CW, CH);
+  ctx.strokeStyle = C.gridLine;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = Math.ceil(Math.min(x0, x1) / step) * step; x <= Math.max(x0, x1); x += step) {
+    const [px] = toPx(x, 0);
+    ctx.moveTo(px, 0); ctx.lineTo(px, CH);
+  }
+  for (let y = Math.ceil(Math.min(y0, y1) / step) * step; y <= Math.max(y0, y1); y += step) {
+    const [, py] = toPx(0, y);
+    ctx.moveTo(0, py); ctx.lineTo(CW, py);
+  }
+  ctx.stroke();
+}
+
+function guideLine(y, color, label) {
+  const [, py] = toPx(0, y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(CW, py); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = color;
+  ctx.font = "10px system-ui";
+  ctx.fillText(label, 4, py - 3);
+}
+
+function drawGuides() {
+  const C = themeColors();
+  const f = S.font;
+  if (!f) return;   // no font loaded yet (e.g. initial theme paint)
+  const meta = selGlyphMeta();
+  // vertical: advance + lsb
+  if (meta) {
+    const [px] = toPx(meta.adv, 0);
+    ctx.strokeStyle = C.guideAdv;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, CH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = C.guideAdv;
+    ctx.font = "10px system-ui";
+    ctx.fillText("adv", px + 3, 12);
+    const [lx] = toPx(meta.lsb, 0);
+    ctx.strokeStyle = C.guideLsb;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, CH); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  guideLine(0, C.guideBase, "baseline");
+  guideLine(f.sxHeight, C.guideX, "x-height");
+  guideLine(f.sCapHeight, C.guideCap, "cap");
+  guideLine(f.ascent, C.guideAsc, "asc");
+  guideLine(f.descent, C.guideAsc, "desc");
+}
+
+function drawPointStuff(contour) {
+  const C = themeColors();
+  const n = contour.length;
+  for (let i = 0; i < n; i++) {
+    if (contour[i].on) continue;
+    let j = (i + 1) % n;
+    while (!contour[j].on && j !== i) j = (j + 1) % n;
+    if (contour[j].on) {
+      const [x1, y1] = toPx(contour[i].x, contour[i].y);
+      const [x2, y2] = toPx(contour[j].x, contour[j].y);
+      ctx.strokeStyle = C.connector;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+  }
+  for (const p of contour) {
+    const [x, y] = toPx(p.x, p.y);
+    if (p.on) {
+      ctx.fillStyle = C.onFill;
+      ctx.strokeStyle = C.onStroke;
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(x - 3.5, y - 3.5, 7, 7);
+      ctx.strokeRect(x - 3.5, y - 3.5, 7, 7);
+    } else {
+      ctx.fillStyle = C.offFill;
+      ctx.strokeStyle = C.offStroke;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+  }
+}
+
+function hitPoint(px, py) {
+  if (!S.outline) return null;
+  let best = null, bestD = 8;
+  for (let ci = 0; ci < S.outline.contours.length; ci++) {
+    const c = S.outline.contours[ci];
+    for (let pi = 0; pi < c.length; pi++) {
+      const [x, y] = toPx(c[pi].x, c[pi].y);
+      const d = Math.hypot(x - px, y - py);
+      if (d < bestD) { bestD = d; best = { ci, pi }; }
+    }
+  }
+  return best;
+}
+
+function hitSegment(px, py) {
+  if (!S.outline) return null;
+  let best = null, bestD = 9;
+  for (let ci = 0; ci < S.outline.contours.length; ci++) {
+    const c = S.outline.contours[ci];
+    for (const seg of segments(c)) {
+      const a = toPx(seg.a.x, seg.a.y), b = toPx(seg.b.x, seg.b.y);
+      let t = 0, minD = Infinity;
+      const cpt = seg.ctrl ? toPx(seg.ctrl.x, seg.ctrl.y) : null;
+      for (let k = 0; k <= 24; k++) {
+        const u = k / 24;
+        const X = cpt ? (1 - u) * (1 - u) * a[0] + 2 * (1 - u) * u * cpt[0] + u * u * b[0]
+                      : a[0] + (b[0] - a[0]) * u;
+        const Y = cpt ? (1 - u) * (1 - u) * a[1] + 2 * (1 - u) * u * cpt[1] + u * u * b[1]
+                      : a[1] + (b[1] - a[1]) * u;
+        const d = Math.hypot(X - px, Y - py);
+        if (d < minD) { minD = d; t = u; }
+      }
+      if (minD < bestD) { bestD = minD; best = { ci, seg, t }; }
+    }
+  }
+  return best;
+}
+
+function pushUndo() {
+  S.undoStack.push(JSON.stringify(S.outline.contours));
+  if (S.undoStack.length > 50) S.undoStack.shift();
+  S.redoStack = [];
+  updateGlyphButtons();
+}
+
+function markDirty() {
+  S.dirty = true;
+  $("g-dirty").style.display = "inline";
+  $("g-save").disabled = false;
+}
+
+function updateGlyphButtons() {
+  $("g-undo").disabled = !S.undoStack.length;
+  $("g-redo").disabled = !S.redoStack.length;
+  $("g-save").disabled = !S.dirty;
+}
+
+function insertBetween(c, ia, ib, ins, skipIdx) {
+  const out = [], n = c.length;
+  let i = ia;
+  out.push(c[i]);
+  i = (i + 1) % n;
+  while (i !== ia) {
+    if (i !== skipIdx) {
+      if (i === ib) out.push(...ins);
+      out.push(c[i]);
+    }
+    i = (i + 1) % n;
+  }
+  return out;
+}
+
+function insertPoint(ci, seg) {
+  const c = S.outline.contours[ci];
+  const ia = c.indexOf(seg.a), ib = c.indexOf(seg.b);
+  const mid = (p, q) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, on: true });
+  if (!seg.ctrl) {
+    S.outline.contours[ci] = insertBetween(c, ia, ib, [mid(seg.a, seg.b)]);
+  } else {
+    const ic = c.indexOf(seg.ctrl);
+    const p01 = { x: (seg.a.x + seg.ctrl.x) / 2, y: (seg.a.y + seg.ctrl.y) / 2, on: false };
+    const p12 = { x: (seg.ctrl.x + seg.b.x) / 2, y: (seg.ctrl.y + seg.b.y) / 2, on: false };
+    const m = mid(p01, p12);
+    S.outline.contours[ci] = insertBetween(c, ia, ib, [p01, m, p12], ic);
+  }
+}
+
+function deletePoint(ci, pi) {
+  const c = S.outline.contours[ci].filter((_, i) => i !== pi);
+  if (c.length < 3 || !c.some((p) => p.on)) return false;
+  S.outline.contours[ci] = normalize(c);
+  return true;
+}
+
+function doUndo() {
+  if (!S.undoStack.length) return;
+  S.redoStack.push(JSON.stringify(S.outline.contours));
+  S.outline.contours = JSON.parse(S.undoStack.pop());
+  setSelection([], null);
+  markDirty(); drawEditor(); updateGlyphButtons();
+}
+function doRedo() {
+  if (!S.redoStack.length) return;
+  S.undoStack.push(JSON.stringify(S.outline.contours));
+  S.outline.contours = JSON.parse(S.redoStack.pop());
+  setSelection([], null);
+  markDirty(); drawEditor(); updateGlyphButtons();
+}
+
+// ------------------------------------------------------ selection helpers
+
+function selPoints() {
+  return S.selPts.map(({ ci, pi }) => S.outline.contours[ci][pi]);
+}
+function pointInSel(ci, pi) {
+  return S.selPts.some((s) => s.ci === ci && s.pi === pi);
+}
+function allPoints() {
+  const pts = [];
+  S.outline.contours.forEach((c, ci) => c.forEach((_, pi) => pts.push({ ci, pi })));
+  return pts;
+}
+function contourPoints(ci) {
+  return S.outline.contours[ci].map((_, pi) => ({ ci, pi }));
+}
+function pointsCentroid(pts) {
+  const P = pts.map(({ ci, pi }) => S.outline.contours[ci][pi]);
+  const n = P.length;
+  if (!n) return null;
+  return { x: P.reduce((a, p) => a + p.x, 0) / n,
+           y: P.reduce((a, p) => a + p.y, 0) / n };
+}
+function selectedCentroid() {
+  return pointsCentroid(S.selPts);
+}
+function pointsBBoxCenter(pts) {
+  const P = pts.map(({ ci, pi }) => S.outline.contours[ci][pi]);
+  if (!P.length) return null;
+  const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2,
+           y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+}
+function updateSelInfo() {
+  const info = $("sel-info");
+  if (S.selPts.length) {
+    info.textContent = S.selPts.length + " point"
+      + (S.selPts.length === 1 ? "" : "s") + " selected";
+  } else if (S.tool === "select") {
+    info.textContent = "click a point, shift-click to add, click a curve to "
+      + "select its contour, drag empty for a marquee";
+  } else {
+    info.textContent = S.tool + " — drag on the canvas to apply";
+  }
+}
+function setSelection(pts, primary) {
+  S.selPts = pts;
+  S.selPrimary = primary;
+  updateSelInfo();
+}
+function setTool(tool) {
+  S.tool = tool;
+  for (const t of ["select", "scale", "rotate"]) {
+    $("tool-" + t).classList.toggle("on", t === tool);
+  }
+  updateSelInfo();
+  drawEditor();
+}
+for (const t of ["select", "scale", "rotate"]) {
+  $("tool-" + t).addEventListener("click", () => setTool(t));
+}
+
+// ------------------------------------------------------------ view / zoom
+
+let spaceDown = false;
+let marquee = null;
+let drag = null;
+
+function zoomAt(px, py, factor) {
+  const u = toUnits(px, py);
+  const s = Math.min(12, Math.max(0.02, view.s * factor));
+  view = { s, ox: px - u[0] * s, oy: py + u[1] * s };
+  drawEditor();
+}
+function fitViewAndDraw() {
+  fitView();
+  drawEditor();
+}
+
+canvas.addEventListener("wheel", (ev) => {
+  if (!S.outline) return;
+  ev.preventDefault();
+  const [px, py] = canvasPos(ev);
+  zoomAt(px, py, ev.deltaY < 0 ? 1.2 : 1 / 1.2);
+}, { passive: false });
+
+window.addEventListener("keydown", (ev) => {
+  if (ev.code === "Space"
+      && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) {
+    spaceDown = true;
+    ev.preventDefault();
+  }
+});
+window.addEventListener("keyup", (ev) => {
+  if (ev.code === "Space") spaceDown = false;
+});
+
+$("zoom-in").addEventListener("click", () => zoomAt(CW / 2, CH / 2, 1.5));
+$("zoom-out").addEventListener("click", () => zoomAt(CW / 2, CH / 2, 1 / 1.5));
+$("zoom-fit").addEventListener("click", fitViewAndDraw);
+
+function flipSelection(axis) {
+  const refs = S.selPts.length ? S.selPts : allPoints();
+  if (!refs.length) return;
+  const c = pointsBBoxCenter(refs);
+  pushUndo();
+  for (const { ci, pi } of refs) {
+    const p = S.outline.contours[ci][pi];
+    if (axis === "h") p.x = 2 * c.x - p.x;
+    else p.y = 2 * c.y - p.y;
+  }
+  markDirty();
+  drawEditor();
+}
+$("flip-h").addEventListener("click", () => flipSelection("h"));
+$("flip-v").addEventListener("click", () => flipSelection("v"));
+
+// ------------------------------------------------------------- drag state
+
+function canvasPos(ev) {
+  const r = canvas.getBoundingClientRect();
+  return [ev.clientX - r.left, ev.clientY - r.top];
+}
+function beginDrag(ev) {
+  try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
+  ev.preventDefault();
+}
+
+canvas.addEventListener("pointerdown", (ev) => {
+  if (!S.outline) return;
+  canvas.focus();
+  const [px, py] = canvasPos(ev);
+  const u = toUnits(px, py);
+  const hit = hitPoint(px, py);
+  const segHit = hitSegment(px, py);
+
+  if (ev.button === 1 || (ev.button === 0 && spaceDown)) {
+    drag = { mode: "pan", x: px, y: py };
+    beginDrag(ev);
+    return;
+  }
+  if (ev.button !== 0) return;
+
+  // transform tools operate on the selection; a click auto-selects
+  if (S.tool === "scale" || S.tool === "rotate") {
+    if (!S.selPts.length) {
+      if (hit) setSelection([hit], hit);
+      else if (segHit) {
+        const cp = contourPoints(segHit.ci);
+        setSelection(cp, cp[0]);
+      } else return;
+    }
+    const c = selectedCentroid();
+    const startPts = selPoints().map((p) => ({ x: p.x, y: p.y }));
+    pushUndo();
+    drag = { mode: S.tool, start: { x: u[0], y: u[1] }, centroid: c, startPts,
+             d0: Math.hypot(u[0] - c.x, u[1] - c.y) || 1,
+             a0: Math.atan2(u[1] - c.y, u[0] - c.x) };
+    beginDrag(ev);
+    drawEditor();
+    return;
+  }
+
+  // select tool
+  if (hit) {
+    if (ev.shiftKey) {
+      const inSel = pointInSel(hit.ci, hit.pi);
+      const pts = inSel
+        ? S.selPts.filter((s) => !(s.ci === hit.ci && s.pi === hit.pi))
+        : S.selPts.concat([hit]);
+      setSelection(pts, inSel ? null : hit);
+    } else if (!pointInSel(hit.ci, hit.pi)) {
+      setSelection([hit], hit);
+    } else {
+      S.selPrimary = hit;   // drag the whole selection from the grabbed handle
+      updateSelInfo();
+    }
+    const primary = S.selPrimary || S.selPts[0];
+    if (!primary) return;
+    const startPts = selPoints().map((p) => ({ x: p.x, y: p.y }));
+    // match by value: after a marquee the selection holds different point
+    // object references than the freshly hit one
+    const pIdx = S.selPts.findIndex((s) => s.ci === primary.ci && s.pi === primary.pi);
+    if (pIdx < 0) return;
+    pushUndo();
+    drag = { mode: "move", startPts, primary,
+             primaryStart: { x: startPts[pIdx].x, y: startPts[pIdx].y } };
+    beginDrag(ev);
+    drawEditor();
+    return;
+  }
+  if (segHit) {
+    // click on a curve selects the whole contour; a drag becomes a marquee
+    const cp = contourPoints(segHit.ci);
+    if (ev.shiftKey) {
+      const add = cp.filter((s) => !pointInSel(s.ci, s.pi));
+      setSelection(S.selPts.concat(add), cp[0]);
+    } else {
+      setSelection(cp, cp[0]);
+    }
+    drag = { mode: "clickish", x0: px, y0: py, moved: false };
+    beginDrag(ev);
+    return;
+  }
+  if (!ev.shiftKey) setSelection([], null);
+  marquee = { x0: px, y0: py, x1: px, y1: py };
+  drag = { mode: "marquee", x0: px, y0: py, shiftAdd: ev.shiftKey };
+  beginDrag(ev);
+  drawEditor();
+});
+
+canvas.addEventListener("pointermove", (ev) => {
+  if (!drag || !S.outline) return;
+  const [px, py] = canvasPos(ev);
+  const u = toUnits(px, py);
+  if (drag.mode === "pan") {
+    view.ox += px - drag.x;
+    view.oy += py - drag.y;
+    drag.x = px; drag.y = py;
+    drawEditor();
+    return;
+  }
+  if (drag.mode === "move") {
+    let dx = u[0] - drag.primaryStart.x;
+    let dy = u[1] - drag.primaryStart.y;
+    if (ev.shiftKey) { dx = Math.round(dx / 10) * 10; dy = Math.round(dy / 10) * 10; }
+    const pts = selPoints();
+    for (let i = 0; i < pts.length; i++) {
+      pts[i].x = drag.startPts[i].x + dx;
+      pts[i].y = drag.startPts[i].y + dy;
+    }
+    markDirty();
+    drawEditor();
+    return;
+  }
+  if (drag.mode === "scale") {
+    const d1 = Math.hypot(u[0] - drag.centroid.x, u[1] - drag.centroid.y);
+    let f = d1 / drag.d0;
+    if (ev.shiftKey) f = Math.round(f / 0.05) * 0.05;
+    f = Math.min(20, Math.max(0.02, f));
+    const pts = selPoints();
+    for (let i = 0; i < pts.length; i++) {
+      pts[i].x = drag.centroid.x + (drag.startPts[i].x - drag.centroid.x) * f;
+      pts[i].y = drag.centroid.y + (drag.startPts[i].y - drag.centroid.y) * f;
+    }
+    markDirty();
+    drawEditor();
+    return;
+  }
+  if (drag.mode === "rotate") {
+    let a = Math.atan2(u[1] - drag.centroid.y, u[0] - drag.centroid.x) - drag.a0;
+    if (ev.shiftKey) a = Math.round(a / (Math.PI / 12)) * (Math.PI / 12);
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const pts = selPoints();
+    for (let i = 0; i < pts.length; i++) {
+      const dx = drag.startPts[i].x - drag.centroid.x;
+      const dy = drag.startPts[i].y - drag.centroid.y;
+      pts[i].x = drag.centroid.x + dx * cos - dy * sin;
+      pts[i].y = drag.centroid.y + dx * sin + dy * cos;
+    }
+    markDirty();
+    drawEditor();
+    return;
+  }
+  if (drag.mode === "marquee") {
+    if (Math.hypot(px - drag.x0, py - drag.y0) > 4) drag.moved = true;
+    marquee.x1 = px; marquee.y1 = py;
+    drawEditor();
+    return;
+  }
+  if (drag.mode === "clickish") {
+    if (Math.hypot(px - drag.x0, py - drag.y0) > 4) {
+      drag.moved = true;
+      drag.mode = "marquee";
+      marquee = { x0: drag.x0, y0: drag.y0, x1: px, y1: py };
+      drawEditor();
+    }
+  }
+});
+
+function endDrag(ev) {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
+  if (d.mode === "marquee") {
+    const x0 = Math.min(d.x0, marquee.x1), x1 = Math.max(d.x0, marquee.x1);
+    const y0 = Math.min(d.y0, marquee.y1), y1 = Math.max(d.y0, marquee.y1);
+    marquee = null;
+    const pts = [];
+    for (let ci = 0; ci < S.outline.contours.length; ci++) {
+      const c = S.outline.contours[ci];
+      for (let pi = 0; pi < c.length; pi++) {
+        const [x, y] = toPx(c[pi].x, c[pi].y);
+        if (x >= x0 && x <= x1 && y >= y0 && y <= y1) pts.push({ ci, pi });
+      }
+    }
+    setSelection(d.shiftAdd ? S.selPts.concat(pts) : pts, null);
+    drawEditor();
+  } else {
+    drawEditor();
+  }
+}
+
+canvas.addEventListener("pointerup", endDrag);
+canvas.addEventListener("pointercancel", endDrag);
+
+canvas.addEventListener("dblclick", (ev) => {
+  if (!S.outline) return;
+  const [px, py] = canvasPos(ev);
+  const hit = hitSegment(px, py);
+  if (!hit) return;
+  pushUndo();
+  insertPoint(hit.ci, hit.seg);
+  S.outline.contours[hit.ci] = normalize(S.outline.contours[hit.ci]);
+  markDirty();
+  drawEditor();
+});
+
+canvas.addEventListener("contextmenu", (ev) => {
+  ev.preventDefault();
+  if (!S.outline) return;
+  const [px, py] = canvasPos(ev);
+  const hit = hitPoint(px, py);
+  if (!hit) return;
+  pushUndo();
+  const target = pointInSel(hit.ci, hit.pi) ? S.selPts : [hit];
+  if (deletePoints(target)) {
+    setSelection([], null);
+    markDirty();
+    drawEditor();
+  } else {
+    S.undoStack.pop();
+  }
+});
+
+// delete many points at once; keeps any contour that would become invalid
+function deletePoints(pts) {
+  const byContour = {};
+  for (const { ci, pi } of pts) {
+    (byContour[ci] = byContour[ci] || []).push(pi);
+  }
+  let changed = false;
+  S.outline.contours = S.outline.contours.map((c, ci) => {
+    if (!byContour[ci]) return c;
+    const drop = new Set(byContour[ci]);
+    const filtered = c.filter((_, i) => !drop.has(i));
+    if (filtered.length < 3 || !filtered.some((p) => p.on)) return c;
+    changed = true;
+    return normalize(filtered);
+  });
+  return changed;
+}
+
+canvas.addEventListener("keydown", (ev) => {
+  if (!S.outline) return;
+  const k = ev.key;
+  if ((k === "z" || k === "y") && (ev.ctrlKey || ev.metaKey)) {
+    ev.preventDefault();
+    if (k === "z") doUndo(); else doRedo();
+    return;
+  }
+  if (k === "Delete" || k === "Backspace") {
+    if (S.selPts.length) {
+      ev.preventDefault();
+      pushUndo();
+      if (deletePoints(S.selPts)) {
+        setSelection([], null);
+        markDirty();
+        drawEditor();
+      } else S.undoStack.pop();
+    }
+    return;
+  }
+  if (k.startsWith("Arrow") && S.selPts.length) {
+    ev.preventDefault();
+    const step = ev.shiftKey ? 10 : 1;
+    const dx = k === "ArrowLeft" ? -step : k === "ArrowRight" ? step : 0;
+    const dy = k === "ArrowUp" ? step : k === "ArrowDown" ? -step : 0;
+    for (const p of selPoints()) { p.x += dx; p.y += dy; }
+    markDirty();
+    drawEditor();
+    return;
+  }
+  if (k === "Escape") {
+    setSelection([], null);
+    drawEditor();
+    return;
+  }
+  if (k === "v" || k === "V") { setTool("select"); return; }
+  if (k === "s" || k === "S") { setTool("scale"); return; }
+  if (k === "r" || k === "R") { setTool("rotate"); return; }
+  if (k === "f" || k === "F" || (k === "0" && ev.ctrlKey)) {
+    ev.preventDefault();
+    fitViewAndDraw();
+  }
+});
+document.querySelectorAll(".shiftrow button").forEach((b) => {
+  b.addEventListener("click", () => {
+    if (!S.outline) return;
+    const dx = +b.dataset.dx, dy = +b.dataset.dy;
+    pushUndo();
+    for (const c of S.outline.contours)
+      for (const p of c) { p.x += dx; p.y += dy; }
+    markDirty();
+    drawEditor();
+  });
+});
+
+$("g-undo").addEventListener("click", doUndo);
+$("g-redo").addEventListener("click", doRedo);
+
+async function selectGlyph(name) {
+  S.sel = name;
+  renderGrid();
+  const r = await apiGet(`/api/glyph/${encodeURIComponent(name)}`);
+  if (!r.ok) { toast(r.error); return; }
+  const g = r.glyph;
+  const meta = S.glyphs.find((x) => x.name === name) || {};
+  S.outline = { contours: g.contours.map(normalize) };
+  setSelection([], null);
+  S.undoStack = []; S.redoStack = [];
+  S.dirty = false;
+  $("g-title").textContent = `Glyph — ${name}` +
+    (meta.cp != null ? `  U+${meta.cp.toString(16).toUpperCase().padStart(4, "0")}` : "");
+  $("g-adv").value = g.adv;
+  $("g-lsb").value = g.lsb;
+  $("g-dirty").style.display = "none";
+  updateGlyphButtons();
+  fitView();
+  drawEditor();
+}
+
+function saveOutline() {
+  if (!S.outline) return;
+  return enqueue(async () => {
+    const r = await apiPost(`/api/glyph/${encodeURIComponent(S.sel)}`,
+                            { contours: S.outline.contours });
+    if (!r.ok) { toast(r.error); return; }
+    S.adj = r.adj || S.adj;
+    S.dirty = false;
+    $("g-dirty").style.display = "none";
+    updateGlyphButtons();
+    // server rounds coordinates; resync the editor
+    const rg = await apiGet(`/api/glyph/${encodeURIComponent(S.sel)}`);
+    if (rg.ok) {
+      S.outline = { contours: rg.glyph.contours.map(normalize) };
+      fitView();
+      drawEditor();
+    }
+    await refreshGlyphs();
+    refreshFontData();
+    toast(`saved ${S.sel}`);
+    saveSession();
+  });
+}
+
+$("g-save").addEventListener("click", saveOutline);
+
+// ---------------------------------------------------------------- metrics
+
+function renderMetricsFields() {
+  const f = S.font;
+  // Show the applied override when present, the base value otherwise; skip
+  // fields the user is currently editing so typing is never clobbered.
+  const set = (id, v) => {
+    if (document.activeElement !== $(id)) $(id).value = v;
+  };
+  set("m-ascent", S.adj.ascent ?? f.ascent);
+  set("m-descent", S.adj.descent ?? f.descent);
+  set("m-linegap", S.adj.linegap ?? f.linegap);
+  set("m-baseshift", S.adj.baseline_shift ?? 0);
+  set("m-advscale", S.adj.advance_scale ?? 1);
+  set("m-bearing", S.adj.bearing ?? 0);
+}
+
+let metricsTimer = null;
+function scheduleApply() {
+  clearTimeout(metricsTimer);
+  metricsTimer = setTimeout(applyMetrics, 250);
+}
+
+// One metrics request in flight at a time; changes made while it runs
+// trigger a follow-up with the latest adj. Without this, two overlapping
+// requests each replace the whole adjustment state on the server and the
+// slower one wins, silently dropping the other's change.
+let applyingMetrics = false, metricsPending = false;
+async function applyMetrics() {
+  if (applyingMetrics) { metricsPending = true; return; }
+  applyingMetrics = true;
+  try {
+    await enqueue(async () => {
+      const r = await apiPost("/api/metrics", S.adj);
+      if (!r.ok) { toast(r.error); return; }
+      S.adj = r.adj || S.adj;
+      // S.font drives the editor's fit and guides — refresh it or the
+      // view stays aligned to the old ascent/descent
+      const ff = await apiGet("/api/font");
+      if (ff.ok) S.font = ff.font;
+      renderMetricsFields();
+      await refreshGlyphs();
+      refreshFontData();
+      if (S.outline) { fitView(); drawEditor(); }
+      saveSession();
+    });
+  } finally {
+    applyingMetrics = false;
+    if (metricsPending) { metricsPending = false; applyMetrics(); }
+  }
+}
+
+for (const [id, key, isFloat] of [
+  ["m-ascent", "ascent", false], ["m-descent", "descent", false],
+  ["m-linegap", "linegap", false], ["m-baseshift", "baseline_shift", false],
+  ["m-advscale", "advance_scale", true], ["m-bearing", "bearing", false],
+]) {
+  $(id).addEventListener("input", () => {
+    const v = $(id).value;
+    if (v === "") delete S.adj[key];
+    else S.adj[key] = isFloat ? parseFloat(v) : parseInt(v, 10);
+    scheduleApply();
+  });
+}
+
+$("g-applymetrics").addEventListener("click", () => {
+  if (!S.sel) return;
+  const adv = parseInt($("g-adv").value, 10);
+  const lsb = parseInt($("g-lsb").value, 10);
+  if (isNaN(adv) || isNaN(lsb)) { toast("advance and lsb must be numbers"); return; }
+  S.adj.glyphs = S.adj.glyphs || {};
+  S.adj.glyphs[S.sel] = Object.assign(S.adj.glyphs[S.sel] || {}, { advance: adv, lsb });
+  applyMetrics();
+  toast(`pinned ${S.sel}: advance ${adv}, lsb ${lsb}`);
+});
+
+for (const id of ["g-adv", "g-lsb"]) {
+  $(id).addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      $("g-applymetrics").click();
+    }
+  });
+}
+
+// ---------------------------------------------------------------- kerning
+
+function renderKerning() {
+  const body = $("kern-body");
+  body.innerHTML = "";
+  const kern = S.adj.kerning || {};
+  const names = new Set(S.glyphs.map((g) => g.name));
+  const rows = Object.keys(kern).sort();
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td colspan="4" class="hint">no kerning pairs yet</td>';
+    body.appendChild(tr);
+    return;
+  }
+  for (const key of rows) {
+    const tr = document.createElement("tr");
+    const [ln, rn] = splitPair(key);
+    tr.innerHTML = "";
+    const tdL = document.createElement("td");
+    tdL.className = "kern-ch";
+    tdL.textContent = nameToChar(ln) || ln;
+    tdL.title = ln;
+    const tdR = document.createElement("td");
+    tdR.className = "kern-ch";
+    tdR.textContent = nameToChar(rn) || rn;
+    tdR.title = rn;
+    const tdV = document.createElement("td");
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.value = kern[key];
+    inp.addEventListener("input", () => {
+      if (inp.value === "") delete S.adj.kerning[key];
+      else S.adj.kerning[key] = parseInt(inp.value, 10);
+      scheduleApply();
+    });
+    tdV.appendChild(inp);
+    const tdX = document.createElement("td");
+    const del = document.createElement("button");
+    del.textContent = "✕";
+    del.title = "remove pair";
+    del.addEventListener("click", () => {
+      delete S.adj.kerning[key];
+      scheduleApply();
+      renderKerning();
+    });
+    tdX.appendChild(del);
+    tr.append(tdL, tdR, tdV, tdX);
+    body.appendChild(tr);
+  }
+}
+
+function splitPair(key) {
+  // glyph names concatenated; names are ASCII (potrace/traced fonts) so the
+  // last name starts at the first char that also begins a known glyph name
+  const names = new Set(S.glyphs.map((g) => g.name));
+  for (let i = 1; i < key.length; i++) {
+    if (names.has(key.slice(0, i)) && names.has(key.slice(i))) {
+      return [key.slice(0, i), key.slice(i)];
+    }
+  }
+  return [key.slice(0, 1), key.slice(1)];
+}
+
+function nameToChar(name) {
+  const g = S.glyphs.find((x) => x.name === name);
+  return g && g.cp != null ? String.fromCodePoint(g.cp) : null;
+}
+
+$("kern-add").addEventListener("click", () => {
+  const l = $("kern-l").value, r = $("kern-r").value, v = parseInt($("kern-v").value, 10);
+  if (!l || !r || isNaN(v)) { toast("need left char, right char and a value"); return; }
+  const ln = S.charToGlyph[l], rn = S.charToGlyph[r];
+  if (!ln || !rn) {
+    toast(`no glyph for ${!ln ? "'" + l + "'" : "'" + r + "'"} in this font`);
+    return;
+  }
+  S.adj.kerning = S.adj.kerning || {};
+  S.adj.kerning[ln + rn] = v;
+  $("kern-l").value = $("kern-r").value = "";
+  $("kern-v").value = "";
+  renderKerning();
+  scheduleApply();
+});
+
+// ---------------------------------------------------------------- trace
+
+const TRACE_WEIGHT_STYLES = {100: "Thin", 200: "ExtraLight", 300: "Light",
+                             400: "Regular", 500: "Medium", 600: "SemiBold",
+                             700: "Bold", 800: "ExtraBold", 900: "Black"};
+
+function traceStyle(weight, italic) {
+  const base = TRACE_WEIGHT_STYLES[weight] || "Regular";
+  if (base === "Regular") return italic ? "Italic" : "Regular";
+  if (base === "Bold") return italic ? "Bold Italic" : "Bold";
+  return italic ? base + " Italic" : base;
+}
+
+function traceOutName(family, style) {
+  const base = (family + "-" + style).replace(/\s+/g, "")
+    .replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "");
+  return base + ".ttf";
+}
+
+let traceFamilies = [];
+let traceRows = [];
+let tracePolling = false;
+
+async function loadDiffusions() {
+  const r = await apiGet("/api/diffusions");
+  if (!r.ok) { toast(r.error); return; }
+  traceFamilies = r.families || [];
+  const sel = $("tr-family-sel");
+  sel.innerHTML = "";
+  for (const f of traceFamilies) {
+    const opt = document.createElement("option");
+    opt.value = f.name;
+    opt.textContent = f.name;
+    sel.appendChild(opt);
+  }
+  if (traceFamilies.length) selectTraceFamily(traceFamilies[0].name);
+  else toast("no diffusion families found — put images in subfolders of "
+             + "diffusion_generations/");
+}
+
+function selectTraceFamily(name) {
+  const fam = traceFamilies.find((f) => f.name === name);
+  if (!fam) return;
+  traceRows = fam.images.map((im) => ({
+    path: im.path, name: im.name,
+    weight: im.weight, italic: im.italic,
+    weightAuto: im.weight_auto, italicAuto: im.italic_auto,
+    styleEdited: false, italicTouched: false, selected: false, el: null,
+  }));
+  if (name !== "(unassigned)") $("tr-family").value = name;
+  renderTraceList();
+}
+
+function updateRowOut(row) {
+  if (!row.el) return;
+  const fam = $("tr-family").value.trim();
+  const style = row.el.querySelector(".tr-style-input").value.trim()
+    || traceStyle(row.weight ?? 400, row.italic);
+  row.el.querySelector(".tr-out").textContent =
+    "\u2192 " + (fam ? traceOutName(fam, style) : "");
+}
+
+function rowNeedsInput(row) {
+  return row.weight == null || (!row.italicAuto && !row.italicTouched);
+}
+
+function renderTraceList() {
+  const box = $("tr-list");
+  box.innerHTML = "";
+  for (const row of traceRows) {
+    const el = document.createElement("div");
+    el.className = "tr-row";
+    const line1 = document.createElement("div");
+    line1.className = "tr-line1";
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "tr-check";
+    check.checked = row.selected;
+    const name = document.createElement("span");
+    name.className = "tr-name";
+    name.textContent = row.name;
+    name.title = row.path;
+    const weight = document.createElement("input");
+    weight.type = "number";
+    weight.className = "tr-weight" + (row.weight == null ? " ask" : "");
+    weight.min = 100; weight.max = 900; weight.step = 100;
+    weight.placeholder = "?";
+    weight.value = row.weight ?? "";
+    weight.title = row.weightAuto ? "weight detected from file name"
+      : "no weight hint in the file name — assign one";
+    const italLab = document.createElement("label");
+    italLab.className = "hint";
+    const ital = document.createElement("input");
+    ital.type = "checkbox";
+    ital.className = "tr-italic";
+    ital.checked = !!row.italic;
+    italLab.appendChild(ital);
+    italLab.appendChild(document.createTextNode(
+      " Italic" + (row.italicAuto || row.italicTouched ? "" : " ?")));
+    if (!row.italicAuto) italLab.title = "no italic hint — confirm";
+    const styleInput = document.createElement("input");
+    styleInput.type = "text";
+    styleInput.className = "tr-style-input";
+    styleInput.title = "subfamily name — auto-filled from weight/italic, editable";
+    styleInput.value = traceStyle(row.weight ?? 400, row.italic);
+    const status = document.createElement("span");
+    status.className = "tr-status";
+    const line2 = document.createElement("div");
+    line2.className = "tr-line2";
+    const hint = document.createElement("span");
+    hint.className = "tr-hint";
+    hint.textContent = (row.weightAuto && row.italicAuto)
+      ? "auto" : (row.weight == null ? "no weight hint" : "");
+    const out = document.createElement("span");
+    out.className = "tr-out";
+    line2.append(hint, out, status);
+    line1.append(check, name, weight, italLab, styleInput);
+    el.append(line1, line2);
+    const refreshHint = () => {
+      if (row.weightAuto && row.italicAuto) hint.textContent = "auto";
+      else if (row.weight == null) hint.textContent = "no weight hint";
+      else if (!row.italicAuto && !row.italicTouched) hint.textContent = "confirm italic";
+      else hint.textContent = "";
+    };
+    weight.addEventListener("input", () => {
+      row.weight = weight.value === ""
+        ? null : (parseInt(weight.value, 10) || 400);
+      weight.classList.toggle("ask", row.weight == null);
+      if (!row.styleEdited) styleInput.value = traceStyle(row.weight ?? 400, row.italic);
+      refreshHint();
+      updateRowOut(row);
+    });
+    ital.addEventListener("change", () => {
+      row.italic = ital.checked;
+      row.italicTouched = true;
+      if (!row.styleEdited) styleInput.value = traceStyle(row.weight ?? 400, row.italic);
+      refreshHint();
+      updateRowOut(row);
+    });
+    styleInput.addEventListener("input", () => {
+      row.styleEdited = true;
+      updateRowOut(row);
+    });
+    check.addEventListener("change", () => { row.selected = check.checked; });
+    row.el = el;
+    updateRowOut(row);
+    box.appendChild(el);
+  }
+}
+
+$("tr-family-sel").addEventListener("change", (ev) => {
+  selectTraceFamily(ev.target.value);
+});
+$("tr-family").addEventListener("input", () => {
+  for (const row of traceRows) updateRowOut(row);
+});
+$("tr-selall").addEventListener("change", (ev) => {
+  for (const row of traceRows) {
+    row.selected = ev.target.checked;
+    if (row.el) row.el.querySelector(".tr-check").checked = ev.target.checked;
+  }
+});
+
+function selectedRows() {
+  return traceRows.filter((r) => r.selected);
+}
+
+function openGallery() {
+  const cards = $("gallery-cards");
+  cards.innerHTML = "";
+  const rows = selectedRows();
+  if (!rows.length) { toast("no images selected"); return; }
+  for (const row of rows) cards.appendChild(galleryCard(row));
+  $("gallery").classList.add("open");
+}
+
+function galleryCard(row) {
+  const card = document.createElement("div");
+  card.className = "g-card" + (rowNeedsInput(row) ? " needs" : "");
+  const img = document.createElement("img");
+  img.src = "/api/thumb?path=" + encodeURIComponent(row.path) + "&size=256";
+  img.alt = row.name;
+  const name = document.createElement("div");
+  name.className = "g-name";
+  name.textContent = row.name;
+  name.title = row.path;
+  const ctrl = document.createElement("div");
+  ctrl.className = "g-controls";
+  const wsel = document.createElement("select");
+  const ph = document.createElement("option");
+  ph.value = ""; ph.textContent = "\u2014 weight \u2014";
+  wsel.appendChild(ph);
+  for (const [v, label] of Object.entries(TRACE_WEIGHT_STYLES)) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = label + " (" + v + ")";
+    wsel.appendChild(o);
+  }
+  if (row.weight != null) wsel.value = String(row.weight);
+  const italLab = document.createElement("label");
+  italLab.className = "hint";
+  const ital = document.createElement("input");
+  ital.type = "checkbox";
+  ital.checked = !!row.italic;
+  italLab.appendChild(ital);
+  italLab.appendChild(document.createTextNode(
+    " Italic" + (row.italicAuto || row.italicTouched ? "" : " ?")));
+  const styleInput = document.createElement("input");
+  styleInput.type = "text";
+  styleInput.className = "tr-style-input";
+  styleInput.placeholder = "style";
+  styleInput.value = row.styleEdited
+    ? row.el.querySelector(".tr-style-input").value
+    : traceStyle(row.weight ?? 400, row.italic);
+  const syncStyle = () => {
+    if (!row.styleEdited) {
+      styleInput.value = traceStyle(row.weight ?? 400, row.italic);
+      row.el.querySelector(".tr-style-input").value = styleInput.value;
+    }
+  };
+  wsel.addEventListener("change", () => {
+    row.weight = wsel.value === "" ? null : parseInt(wsel.value, 10);
+    card.classList.toggle("needs", rowNeedsInput(row));
+    syncStyle();
+  });
+  ital.addEventListener("change", () => {
+    row.italic = ital.checked;
+    row.italicTouched = true;
+    card.classList.toggle("needs", rowNeedsInput(row));
+    syncStyle();
+  });
+  styleInput.addEventListener("input", () => {
+    row.styleEdited = true;
+    row.el.querySelector(".tr-style-input").value = styleInput.value;
+  });
+  ctrl.append(wsel, italLab);
+  card.append(img, name, ctrl, styleInput);
+  return card;
+}
+
+$("gallery-cancel").addEventListener("click", () => {
+  $("gallery").classList.remove("open");
+});
+$("gallery-ok").addEventListener("click", () => {
+  // the user has seen and confirmed every selected image's settings
+  for (const row of selectedRows()) row.italicTouched = true;
+  $("gallery").classList.remove("open");
+  runTrace();
+});
+
+$("tr-review").addEventListener("click", openGallery);
+
+$("tr-run").addEventListener("click", () => {
+  if (!$("tr-family").value.trim()) { toast("enter a family name first"); return; }
+  if (!selectedRows().length) { toast("select at least one image"); return; }
+  if (selectedRows().some(rowNeedsInput)) {
+    openGallery();      // missing hints -> prompt in the gallery
+  } else {
+    runTrace();
+  }
+});
+
+async function runTrace() {
+  const family = $("tr-family").value.trim();
+  const jobs = selectedRows().map((r) => {
+    const style = r.el.querySelector(".tr-style-input").value.trim();
+    const job = { image: r.path, weight: r.weight, italic: !!r.italic };
+    if (style) job.style = style;
+    return job;
+  });
+  if (jobs.some((j) => j.weight == null)) {
+    toast("assign a weight to every selected image first");
+    return;
+  }
+  const body = {
+    jobs, family, out_dir: $("tr-outdir").value,
+    turdsize: parseInt($("tr-turdsize").value, 10) || 1,
+    alphamax: parseFloat($("tr-alphamax").value) || 1.0,
+    opttolerance: parseFloat($("tr-opttolerance").value) ?? 0.1,
+    cu2qu_err: parseFloat($("tr-cu2qu").value) ?? 0.5,
+    bearing_px: parseFloat($("tr-bearingpx").value) ?? 2.0,
+    bearing_frac: parseFloat($("tr-bearingfrac").value) ?? 0.15,
+    invert: $("tr-invert").checked,
+    baseline_px: $("tr-baseline").value === "" ? null : parseFloat($("tr-baseline").value),
+    mask_threshold: $("tr-mask").value === "" ? null : parseInt($("tr-mask").value, 10),
+    metrics_from: $("tr-metrics").value.trim() || null,
+  };
+  // warn before overwriting existing fonts (e.g. previously tuned ones)
+  const pf = await apiPost("/api/trace/preflight", body);
+  if (!pf.ok) { toast(pf.error); return; }
+  if (pf.existing.length &&
+      !confirm(`Overwrite existing font${pf.existing.length === 1 ? "" : "s"}: ` +
+               pf.existing.join(", ") + "?")) {
+    return;
+  }
+  const resp = await apiPost("/api/trace", body);
+  if (!resp.ok) { toast(resp.error); return; }
+  renderTraceStatus(resp.status);
+  pollTrace();
+}
+
+function renderTraceStatus(status) {
+  const busy = status.running;
+  $("tr-run").disabled = busy;
+  $("tr-progress").textContent = busy
+    ? "tracing…"
+    : (status.jobs.length
+       ? `idle — ${status.jobs.length} job${status.jobs.length === 1 ? "" : "s"} last run`
+       : "");
+  for (const job of status.jobs) {
+    const row = traceRows.find((r) => r.path === job.image);
+    if (!row || !row.el) continue;
+    const st = row.el.querySelector(".tr-status");
+    st.className = "tr-status";
+    st.removeAttribute("title");
+    if (job.status === "done") {
+      st.classList.add("ok");
+      st.textContent = job.message;
+    } else if (job.status === "error") {
+      st.classList.add("err");
+      st.textContent = "error";
+      st.title = job.message;
+    } else if (job.status === "running") {
+      st.classList.add("running");
+      st.textContent = "tracing…";
+    } else {
+      st.textContent = "";
+    }
+  }
+}
+
+async function pollTrace() {
+  if (tracePolling) return;
+  tracePolling = true;
+  try {
+    while (true) {
+      const r = await apiGet("/api/trace/status");
+      if (!r.ok) break;
+      renderTraceStatus(r.status);
+      if (!r.status.running) {
+        const done = r.status.jobs.filter((j) => j.status === "done").length;
+        const failed = r.status.jobs.filter((j) => j.status === "error").length;
+        toast(`trace finished: ${done} font${done === 1 ? "" : "s"} written` +
+              (failed ? `, ${failed} failed` : ""));
+        const fr = await apiGet("/api/fonts");
+        if (fr.ok) populateFontSel(fr.fonts);
+        break;
+      }
+      await new Promise((res) => setTimeout(res, 500));
+    }
+  } finally {
+    tracePolling = false;
+  }
+}
+// ---------------------------------------------------------------- identity
+
+$("id-apply").addEventListener("click", () => {
+  enqueue(async () => {
+    const body = {
+      family: $("id-family").value.trim(),
+      subfamily: $("id-sub").value.trim(),
+      weight: parseInt($("id-weight").value, 10) || 400,
+      italic: $("id-italic").checked,
+    };
+    const r = await apiPost("/api/name", body);
+    if (!r.ok) { toast(r.error); return; }
+    S.font = r.font;
+    toast(`identity updated — ${r.font.family} ${r.font.subfamily}`);
+    refreshFontData();
+    saveSession();
+  });
+});
+
+// ---------------------------------------------------------------- export
+
+function fontFilename() {
+  const clean = (s) => (s || "font").replace(/[^A-Za-z0-9_.-]+/g, "_");
+  return `${clean(S.font.family)}-${clean(S.font.subfamily)}.ttf`;
+}
+
+$("savebtn").addEventListener("click", () => {
+  enqueue(async () => {
+    const r = await apiPost("/api/export", { filename: fontFilename() });
+    toast(r.ok ? `saved ${r.path}` : r.error);
+  });
+});
+
+$("dlbtn").addEventListener("click", () => {
+  enqueue(async () => {
+    const blob = await fetch("/api/fontfile?download=1").then((x) => x.blob());
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fontFilename();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast("downloaded");
+  });
+});
+
+$("reload").addEventListener("click", () => {
+  if (S.font) selectFont(S.font.path);
+});
+
+$("fontsel").addEventListener("change", (ev) => {
+  if (ev.target.value) selectFont(ev.target.value);
+});
+
+// ---------------------------------------------------------------- preview
+
+const KERNEL_TEST_STRING = "$%&+<=>@^|~\u00a2\u00a3\u00a5\u00a9\u00ae\u00b0\u00d7\u00f7\u20ac\u2122\u2212 \u00a0!\"#'()*,-./:;?[\\]_{}\u00b7\u2013\u2014\u2018\u2019\u201c\u201d\u2022\u20260123456789`ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+const TEST_STRINGS = [
+  ["Pangram", "The quick brown fox jumps over the lazy dog"],
+  ["Pangram — ALL CAPS", "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG"],
+  ["Pangram — all lower", "the quick brown fox jumps over the lazy dog"],
+  ["Pangram 2", "Pack my box with five dozen liquor jugs."],
+  ["Pangram 2 — ALL CAPS", "PACK MY BOX WITH FIVE DOZEN LIQUOR JUGS."],
+  ["Pangram 2 — all lower", "pack my box with five dozen liquor jugs."],
+  ["Pangram 3", "Sphinx of black quartz, judge my vow."],
+  ["Digits", "0123456789"],
+  ["Latin kernel — all 116 glyphs", KERNEL_TEST_STRING],
+];
+
+const presetSel = $("preset-sel");
+for (const [label, value] of TEST_STRINGS) {
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = label;
+  presetSel.appendChild(opt);
+}
+presetSel.addEventListener("change", () => {
+  if (!presetSel.value) return;
+  $("preview-text").value = presetSel.value;
+  presetSel.value = "";
+  renderPreview();
+});
+
+function renderPreview() {
+  const p = $("preview");
+  p.textContent = $("preview-text").value;
+  p.style.fontFamily = "'uiFont', serif";
+  p.style.fontSize = S.previewSize + "px";
+  p.style.fontStyle = S.font && S.font.italic ? "italic" : "normal";
+  p.style.fontWeight = S.font ? S.font.weight : 400;
+}
+
+$("preview-text").addEventListener("input", renderPreview);
+$("preview-size").addEventListener("change", (ev) => {
+  S.previewSize = parseInt(ev.target.value, 10);
+  renderPreview();
+});
+
+// ---------------------------------------------------------------- font data
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(",")[1]);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+}
+
+let fontRefreshChain = Promise.resolve();
+function refreshFontData() {
+  fontRefreshChain = fontRefreshChain.then(async () => {
+    try {
+      const blob = await fetch("/api/fontfile").then((r) => r.blob());
+      const b64 = await blobToBase64(blob);
+      S.fontData = "data:font/ttf;base64," + b64;
+      $("fontstyle").textContent =
+        "@font-face{font-family:'uiFont';src:url(" + S.fontData + ") format('truetype')}";
+      renderGrid();
+      renderPreview();
+    } catch (e) {
+      // keep the previous font data; a later refresh will retry
+    }
+  });
+}
+
+// ---------------------------------------------------------------- tabs
+
+function switchTab(name) {
+  for (const t of ["metrics", "kerning", "glyph", "trace"]) {
+    $("tab-" + t).classList.toggle("on", t === name);
+    $("tabbtn-" + t).classList.toggle("on", t === name);
+  }
+  if (name === "glyph") resizeEditor();   // tab was display:none; canvas fits now
+}
+for (const t of ["metrics", "kerning", "glyph", "trace"]) {
+  $("tabbtn-" + t).addEventListener("click", () => switchTab(t));
+}
+
+$("gsearch").addEventListener("input", renderGrid);
+
+initTheme();
+resizeEditor();
+loadDiffusions();
+loadFontList();
+</script>
+</body>
+</html>

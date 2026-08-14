@@ -1,0 +1,28 @@
+{
+  "ascent": 760,
+  "descent": -240,
+  "linegap": 0,
+  "baseline_shift": 0,
+  "advance_scale": 1.0,
+  "bearing": 6,
+  "glyphs": {
+    "y": {"shift": -2},
+    "g": {"shift": -2},
+    "j": {"shift": -2},
+    "p": {"shift": -2},
+    "q": {"shift": -2}
+  },
+  "kerning": {
+    "AV": -40, "AW": -40, "AY": -40,
+    "AT": -25,
+    "To": -25, "Ta": -25, "Te": -25, "Tt": -20,
+    "Wo": -25, "Wa": -25, "We": -25,
+    "VA": -30, "WA": -30, "YA": -30,
+    "Yo": -20, "Ya": -20,
+    "LT": -20,
+    "Co": -15, "Ca": -15, "Ce": -15,
+    "OA": -15, "Oa": -15,
+    "Ro": -15, "Ra": -15,
+    "Pa": -10, "Po": -10
+  }
+}

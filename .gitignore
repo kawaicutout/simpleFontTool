@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+*.swp
+
+# generated output (recreated by make_fonts.py / make_references.sh / the UI)
+out/

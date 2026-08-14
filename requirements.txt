@@ -1,0 +1,10 @@
+# Python dependencies for the font pipeline (trace/grid/tune/UI).
+# Install into a virtualenv:
+#   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#
+# System binaries (not pip-installable):
+#   potrace        — required by trace_grid.py (glyph tracing)
+#   chromium       — required by glyph_grid.py / make_specimen_pdf.py
+#                    (SVG rasterization; rsvg-convert works as a fallback)
+fonttools==4.63.0
+Pillow==12.3.0
