@@ -8,6 +8,7 @@ simpleFontTool is a tool that aims to do three things:
 
 Reference grids are not included; make_references uses Merriweather, Merriweather Sans, IBM Plex (Serif/Sans/Mono), and Aleo to make grids that can be used as references. When using Reve, I give a set of 20 grids (various weights and italicization) to give a fairly diverse background.
 
+Note that diffusion models are nowhere near ready to make production-ready type, so you will need to do fixing by hand. Some of this is automatically done by the system, but I primarily made this so that I could whip up a novelty/title font in a couple minutes.
 
 # Glyph Grid — GF Latin Kernel reference images
 
