@@ -7,4 +7,4 @@
 #   chromium       — required by glyph_grid.py / make_specimen_pdf.py
 #                    (SVG rasterization; rsvg-convert works as a fallback)
 fonttools==4.63.0
-Pillow==12.3.0
+Pillow==13.0.0
